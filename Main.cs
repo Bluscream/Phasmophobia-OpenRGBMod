@@ -45,8 +45,11 @@ namespace MelonLoaderMod
         }
 
         private int Port => MelonPrefs.GetInt(ModCategory, "port");
+        private static float MinInterval => MelonPrefs.GetFloat(ModCategory, "min interval s");
+        private static float MaxInterval => MelonPrefs.GetFloat(ModCategory, "max interval s");
         private bool isHunting => LevelController.instance.currentGhost.isHunting;
         private GhostAI.States lastState = GhostAI.States.favouriteRoom;
+        private static bool isEnabled = false;
         private static bool isRunning = false;
         private object[] Timers = new object[] { };
         private static Color black = new Color(0, 0, 0);
@@ -58,6 +61,8 @@ namespace MelonLoaderMod
             MelonPrefs.RegisterCategory(this.GetType().Name, BuildInfo.Name);
             MelonPrefs.RegisterString(ModCategory, "ip", "127.0.0.1", "IP Address or hostname of the OpenRGB server");
             MelonPrefs.RegisterInt(ModCategory, "port", 6742, "Port of the OpenRGB server");
+            MelonPrefs.RegisterFloat(ModCategory, "min interval s", .5f, "Minimal time in seconds for turning off/on");
+            MelonPrefs.RegisterFloat(ModCategory, "max interval s", 1f, "Maximal time in seconds for turning off/on");
 
             Connect();
 
@@ -84,31 +89,36 @@ namespace MelonLoaderMod
 
         public override void OnUpdate()
         {
-            try
+            if (!isEnabled) return;
+            /* if (Input.GetKeyDown(KeyCode.F2))
+             {
+                 LevelController.instance.currentGhost.isHunting = true;
+             }
+             else if (Input.GetKeyDown(KeyCode.F3))
+             {
+                 LevelController.instance.currentGhost.isHunting = false;
+             }*/
+            if (isHunting && !isRunning)
             {
-                if (isHunting && !isRunning)
+                isRunning = true;
+                MelonLogger.Log("Is Hunting!");
+                // DimLEDs();
+                for (int i = 0; i < oldDevices.Count; i++)
                 {
-                    isRunning = true;
-                    MelonLogger.Log("Is Hunting!");
-                    // DimLEDs();
-                    for (int i = 0; i < oldDevices.Count; i++)
-                    {
-                        Timers.Add(MelonCoroutines.Start(FlickerLEDs(oldDevices[i], i)));
-                    }
-                }
-                else if (!isHunting && isRunning)
-                {
-                    isRunning = false;
-                    MelonLogger.Log("No longer Hunting!");
-                    for (int i = 0; i < Timers.Length; i++)
-                    {
-                        MelonCoroutines.Stop(Timers[i]);
-                    }
-                    Timers = new object[] { };
-                    RestoreAll();
+                    Timers.Add(MelonCoroutines.Start(FlickerLEDs(oldDevices[i], i)));
                 }
             }
-            catch { }
+            else if (!isHunting && isRunning)
+            {
+                isRunning = false;
+                MelonLogger.Log("No longer Hunting!");
+                for (int i = 0; i < Timers.Length; i++)
+                {
+                    MelonCoroutines.Stop(Timers[i]);
+                }
+            }
+            Timers = new object[] { };
+            RestoreAll();
         }
 
         public override void OnLevelWasInitialized(int level) // Runs when a Scene has Initialized.
@@ -116,6 +126,7 @@ namespace MelonLoaderMod
             MelonLogger.Log($"OnLevelWasInitialized: {level}");
             if (level < 1) return;
             if (!client.Connected) client.Connect();
+            if (!isEnabled && level > 1) isEnabled = true;
         }
 
         public override void OnApplicationQuit() // Runs when the Game is told to Close.
@@ -144,12 +155,13 @@ namespace MelonLoaderMod
 
         public static IEnumerator FlickerLEDs(Device device, int deviceId)
         {
+            var min = MinInterval; var max = MaxInterval;
             while (isRunning)
             {
                 DimLEDs(device, deviceId);
-                yield return new WaitForSeconds(UnityEngine.Random.Range(.2f, 1f));
+                yield return new WaitForSeconds(UnityEngine.Random.Range(min, max));
                 RestoreLEDs(device, deviceId);
-                yield return new WaitForSeconds(UnityEngine.Random.Range(.2f, 1f));
+                yield return new WaitForSeconds(UnityEngine.Random.Range(min, max));
             }
         }
 
